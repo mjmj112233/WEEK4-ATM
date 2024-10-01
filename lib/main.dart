@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:io'; // Needed for exit functionality
 import 'package:flutter/material.dart';
 
 String pin = '1234';
@@ -37,6 +37,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _pinController = TextEditingController();
   String _pin = '';
+  int _attempts = 0;
 
   void _login() {
     setState(() {
@@ -44,12 +45,38 @@ class _LoginPageState extends State<LoginPage> {
 
       if (_pin == pin) {
         _showLoginSuccessDialog();
+        _attempts = 0;
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid PIN!')),
-        );
+        _attempts++;
+        if (_attempts >= 3) {
+          _showExceededAttemptsDialog();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Invalid PIN!')),
+          );
+        }
       }
     });
+  }
+
+  void _showExceededAttemptsDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Too Many Attempts'),
+          content: const Text('You have exceeded the maximum number of attempts. The application will now exit.'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                exit(0); // Exit the application
+              },
+              child: const Text('Exit'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _showLoginSuccessDialog() {
@@ -127,6 +154,8 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int balance = 5000;
   int? amount;
+  String? accountNumber;
+  String? selectedService;
 
   void _balanceInquiry() {
     showDialog(
@@ -214,6 +243,47 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  void _transferMoney() {
+    String? accountNumber;
+    _showTransferDialog(
+      title: 'Transfer Money',
+      onConfirm: (int value, String account) {
+        if (value <= balance && account.isNotEmpty) {
+          setState(() {
+            balance -= value;
+            accountNumber = account;
+          });
+          _showSnackbar('₱$value transferred to account $accountNumber. New balance: ₱$balance');
+        } else if (account.isEmpty) {
+          _showSnackbar('Invalid account number.');
+        } else {
+          _showSnackbar('Insufficient balance.');
+        }
+      },
+    );
+  }
+
+  void _payBills() {
+    _showPayBillsDialog(
+      title: 'Pay Bills',
+      onConfirm: (int value, String service) {
+        if (value <= balance) {
+          setState(() {
+            balance -= value;
+            selectedService = service;
+          });
+          _showSnackbar('₱$value paid to $selectedService. New balance: ₱$balance');
+        } else {
+          _showSnackbar('Insufficient balance.');
+        }
+      },
+    );
+  }
+
+  void _exitApp() {
+    exit(0); // Exits the application
+  }
+
   void _showTransactionDialog({required String title, required Function(int) onConfirm}) {
     showDialog(
       context: context,
@@ -248,6 +318,106 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  void _showTransferDialog({required String title, required Function(int, String) onConfirm}) {
+    String? accountNumber;
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Text('Enter Account Number:'),
+              TextField(
+                keyboardType: TextInputType.number,
+                onChanged: (value) {
+                  accountNumber = value;
+                },
+              ),
+              const SizedBox(height: 20),
+              const Text('Enter Amount:'),
+              TextField(
+                keyboardType: TextInputType.number,
+                onChanged: (value) {
+                  amount = int.tryParse(value);
+                },
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                if (amount != null && amount! > 0 && accountNumber != null) {
+                  onConfirm(amount!, accountNumber!);
+                }
+                Navigator.of(context).pop();
+              },
+              child: const Text('Confirm'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showPayBillsDialog({required String title, required Function(int, String) onConfirm}) {
+    String? selectedService;
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Text('Select Service:'),
+              DropdownButton<String>(
+                value: selectedService,
+                items: <String>['Meralco', 'Maya', 'Globe', 'PLDT'].map((String service) {
+                  return DropdownMenuItem<String>(
+                    value: service,
+                    child: Text(service),
+                  );
+                }).toList(),
+                onChanged: (String? value) {
+                  setState(() {
+                    selectedService = value;
+                  });
+                },
+              ),
+              const SizedBox(height: 20),
+              if (selectedService != null) // Display the selected service if it is not null
+                Text(
+                  'Selected Service: $selectedService',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              const SizedBox(height: 20),
+              const Text('Enter Amount:'),
+              TextField(
+                keyboardType: TextInputType.number,
+                onChanged: (value) {
+                  amount = int.tryParse(value);
+                },
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                if (amount != null && amount! > 0 && selectedService != null) {
+                  onConfirm(amount!, selectedService!);
+                }
+                Navigator.of(context).pop();
+              },
+              child: const Text('Confirm'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showSnackbar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
@@ -258,67 +428,45 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ATM Activity Week 4'),
+        title: const Text('Home Page'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
       ),
-      body: Padding(
+      body: GridView.count(
         padding: const EdgeInsets.all(16.0),
-        child: GridView.count(
-          crossAxisCount: 2, // Number of columns
-          crossAxisSpacing: 10.0, // Horizontal spacing between cards
-          mainAxisSpacing: 10.0, // Vertical spacing between cards
-          childAspectRatio: 1.3, // Aspect ratio of the card (width/height)
-          children: <Widget>[
-            _buildCard(
-              icon: Icons.account_balance,
-              label: 'Balance Inquiry',
-              onTap: _balanceInquiry,
-            ),
-            _buildCard(
-              icon: Icons.money_off,
-              label: 'Withdraw Cash',
-              onTap: _withdraw,
-            ),
-            _buildCard(
-              icon: Icons.attach_money,
-              label: 'Deposit Money',
-              onTap: _deposit,
-            ),
-            _buildCard(
-              icon: Icons.lock,
-              label: 'Change PIN',
-              onTap: _changePin,
-            ),
-          ],
-        ),
+        crossAxisCount: 2,
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        children: <Widget>[
+          _buildFeatureCard(Icons.account_balance, 'Balance Inquiry', _balanceInquiry),
+          _buildFeatureCard(Icons.money, 'Withdraw', _withdraw),
+          _buildFeatureCard(Icons.payment, 'Deposit', _deposit),
+          _buildFeatureCard(Icons.account_circle, 'Change PIN', _changePin), // Change PIN feature added
+          _buildFeatureCard(Icons.transfer_within_a_station, 'Transfer Money', _transferMoney),
+          _buildFeatureCard(Icons.receipt, 'Pay Bills', _payBills),
+          _buildFeatureCard(Icons.exit_to_app, 'Exit', _exitApp),
+        ],
       ),
     );
   }
 
-  Widget _buildCard({required IconData icon, required String label, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Card(
-        elevation: 5, // Shadow elevation for the card
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(15), // Rounded corners
-        ),
+  Card _buildFeatureCard(IconData icon, String label, VoidCallback onTap) {
+    return Card(
+      elevation: 4.0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10.0),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        splashColor: Colors.tealAccent,
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              Icon(icon, size: 40, color: Colors.teal),
-              const SizedBox(height: 10),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              Icon(icon, size: 48.0, color: Colors.teal),
+              const SizedBox(height: 20),
+              Text(label, textAlign: TextAlign.center),
             ],
           ),
         ),
@@ -326,5 +474,3 @@ class _HomePageState extends State<HomePage> {
     );
   }
 }
-
-
